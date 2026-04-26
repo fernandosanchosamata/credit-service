@@ -1,0 +1,43 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: credit-service
+  config:
+    import: "optional:configserver:http://localhost:8888"
+  cloud:
+    config:
+      enabled: false
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/ntt_credit
+      auto-index-creation: true
+
+  kafka:
+    consumer:
+      group-id: credit-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ntt.credit.model.kafka"
+        spring.json.value.default.type: com.ntt.credit.model.kafka.ApplyPaymentCommand
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+credit:
+  kafka:
+    topics:
+      apply-payment-command: apply-payment-command-topic
+      payment-applied: payment-applied-topic
+      payment-rejected: payment-rejected-topic
+      debt-status-checked: debt-status-checked-topic
+
+eureka:
+  instance:
+    prefer-ip-address: true
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
