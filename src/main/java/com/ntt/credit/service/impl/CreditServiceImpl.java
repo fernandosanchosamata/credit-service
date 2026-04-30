@@ -42,6 +42,7 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Single<CreditResponse> createLoan(CreditCreationRequest request) {
+    log.info("Iniciando creacion de prestamo. customerId={}", request.getCustomerId());
     return validateCustomerForNewProduct(request.getCustomerId())
         .flatMap(
             customer ->
@@ -50,6 +51,7 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Single<CreditResponse> createCreditCard(CreditCreationRequest request) {
+    log.info("Iniciando creacion de tarjeta de credito. customerId={}", request.getCustomerId());
     return validateCustomerForNewProduct(request.getCustomerId())
         .flatMap(customer -> persistCreditCard(request));
   }
@@ -60,6 +62,9 @@ public class CreditServiceImpl implements CreditService {
         .flatMap(
             customer -> {
               if (!"ACTIVE".equals(customer.getStatus())) {
+                log.warn(
+                    "Producto de credito rechazado por cliente inactivo. customerId={}",
+                    customerId);
                 return Single.error(
                     new IllegalArgumentException(
                         "No se pueden aperturar creditos para clientes inactivos."));
@@ -69,6 +74,9 @@ public class CreditServiceImpl implements CreditService {
                   .flatMap(
                       hasDebt -> {
                         if (Boolean.TRUE.equals(hasDebt)) {
+                          log.warn(
+                              "Producto de credito rechazado por deuda vencida. customerId={}",
+                              customerId);
                           return Single.error(
                               new IllegalArgumentException(
                                   "El cliente mantiene deuda vencida y no puede adquirir nuevos productos."));
@@ -89,6 +97,9 @@ public class CreditServiceImpl implements CreditService {
         .flatMap(
             count -> {
               if (count > 0) {
+                log.warn(
+                    "Prestamo rechazado por limite de cliente personal. customerId={}",
+                    request.getCustomerId());
                 return Single.error(
                     new IllegalArgumentException(
                         "Un cliente personal solo puede tener un prestamo activo."));
@@ -139,22 +150,27 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Single<CreditResponse> consume(String creditId, TransactionRequest request) {
+    log.info("Iniciando consumo de credito. creditId={}, amount={}", creditId, request.getAmount());
     return creditRepository
         .findById(creditId)
         .switchIfEmpty(Single.error(new IllegalArgumentException("Credito no encontrado.")))
         .flatMap(
             credit -> {
               if (credit.getStatus() != CreditStatus.ACTIVE) {
+                log.warn("Consumo rechazado por credito inactivo. creditId={}", creditId);
                 return Single.error(new IllegalArgumentException("El credito no esta activo."));
               }
 
               if (credit.getType() != CreditType.CREDIT_CARD) {
+                log.warn(
+                    "Consumo rechazado por tipo de credito no permitido. creditId={}", creditId);
                 return Single.error(
                     new IllegalArgumentException("Solo las tarjetas de credito admiten consumos."));
               }
 
               BigDecimal newConsumedAmount = credit.getConsumedAmount().add(request.getAmount());
               if (newConsumedAmount.compareTo(credit.getCreditLimit()) > 0) {
+                log.warn("Consumo rechazado por limite excedido. creditId={}", creditId);
                 return Single.error(
                     new IllegalArgumentException(
                         "El consumo excede el limite disponible de la tarjeta."));
@@ -167,6 +183,7 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Single<CreditResponse> pay(String creditId, TransactionRequest request) {
+    log.info("Iniciando pago de credito. creditId={}, amount={}", creditId, request.getAmount());
     return creditRepository
         .findById(creditId)
         .switchIfEmpty(Single.error(new IllegalArgumentException("Credito no encontrado.")))
@@ -176,6 +193,7 @@ public class CreditServiceImpl implements CreditService {
               BigDecimal newOutstandingBalance = outstandingBalance.subtract(request.getAmount());
 
               if (newOutstandingBalance.compareTo(BigDecimal.ZERO) < 0) {
+                log.warn("Pago rechazado porque supera deuda pendiente. creditId={}", creditId);
                 return Single.error(
                     new IllegalArgumentException(
                         "El pago supera la deuda pendiente del producto."));
@@ -202,11 +220,13 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Flowable<CreditResponse> getCreditsByCustomerId(String customerId) {
+    log.info("Consultando creditos por cliente. customerId={}", customerId);
     return creditRepository.findByCustomerId(customerId).map(this::buildResponse);
   }
 
   @Override
   public Single<Boolean> hasOverdueDebt(String customerId) {
+    log.debug("Validando deuda vencida. customerId={}", customerId);
     return RxJava3Adapter.monoToMaybe(
             stringRedisOps.opsForValue().get(REDIS_DEBT_PREFIX + customerId))
         .map(value -> "TRUE".equals(value))
@@ -220,6 +240,7 @@ public class CreditServiceImpl implements CreditService {
 
   @Override
   public Single<Boolean> hasActiveCreditCard(String customerId) {
+    log.debug("Validando tarjeta de credito activa. customerId={}", customerId);
     return creditRepository.existsByCustomerIdAndTypeAndStatus(
         customerId, CreditType.CREDIT_CARD, CreditStatus.ACTIVE);
   }
@@ -227,7 +248,16 @@ public class CreditServiceImpl implements CreditService {
   private Single<CreditResponse> saveAndSyncDebtState(Credit credit) {
     credit.setHasOverdueDebt(isOverdue(credit));
 
-    return creditRepository.save(credit).flatMap(this::syncDebtKey).map(this::buildResponse);
+    return creditRepository
+        .save(credit)
+        .doOnSuccess(
+            saved ->
+                log.info(
+                    "Credito guardado. creditId={}, customerId={}",
+                    saved.getId(),
+                    saved.getCustomerId()))
+        .flatMap(this::syncDebtKey)
+        .map(this::buildResponse);
   }
 
   private boolean isOverdue(Credit credit) {
