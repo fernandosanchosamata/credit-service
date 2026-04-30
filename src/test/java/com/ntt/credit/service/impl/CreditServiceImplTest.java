@@ -2,7 +2,6 @@ package com.ntt.credit.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,9 +11,9 @@ import com.ntt.credit.model.dto.CreditCreationRequest;
 import com.ntt.credit.model.dto.CustomerSummaryResponse;
 import com.ntt.credit.model.dto.TransactionRequest;
 import com.ntt.credit.model.entity.Credit;
-import com.ntt.credit.model.kafka.PaymentAppliedEvent;
 import com.ntt.credit.model.enums.CreditStatus;
 import com.ntt.credit.model.enums.CreditType;
+import com.ntt.credit.model.kafka.PaymentAppliedEvent;
 import com.ntt.credit.repository.CreditRepository;
 import com.ntt.credit.service.CreditEventPublisher;
 import io.reactivex.rxjava3.core.Maybe;
@@ -56,7 +55,8 @@ class CreditServiceImplTest {
     when(valueOperations.get("DEUDA_CLIENTE_customer-1")).thenReturn(Mono.empty());
     when(creditRepository.countByCustomerIdAndType("customer-1", CreditType.LOAN))
         .thenReturn(Single.just(0L));
-    when(creditRepository.save(any(Credit.class))).thenAnswer(invocation -> saveCredit(invocation.getArgument(0)));
+    when(creditRepository.save(any(Credit.class)))
+        .thenAnswer(invocation -> saveCredit(invocation.getArgument(0)));
     when(creditRepository.existsByCustomerIdAndHasOverdueDebtTrue("customer-1"))
         .thenReturn(Single.just(false));
     when(valueOperations.delete("DEUDA_CLIENTE_customer-1")).thenReturn(Mono.just(true));
@@ -96,7 +96,8 @@ class CreditServiceImplTest {
             .build();
     TransactionRequest request = transactionRequest(BigDecimal.valueOf(50));
     when(creditRepository.findById("credit-1")).thenReturn(Maybe.just(card));
-    when(creditRepository.save(any(Credit.class))).thenAnswer(invocation -> Single.just(invocation.getArgument(0)));
+    when(creditRepository.save(any(Credit.class)))
+        .thenAnswer(invocation -> Single.just(invocation.getArgument(0)));
     when(creditRepository.existsByCustomerIdAndHasOverdueDebtTrue("customer-1"))
         .thenReturn(Single.just(false));
     when(stringRedisOps.opsForValue()).thenReturn(valueOperations);
@@ -123,7 +124,8 @@ class CreditServiceImplTest {
     TransactionRequest request = transactionRequest(BigDecimal.valueOf(100));
     request.setExternalReference("tx-1");
     when(creditRepository.findById("credit-1")).thenReturn(Maybe.just(loan));
-    when(creditRepository.save(any(Credit.class))).thenAnswer(invocation -> Single.just(invocation.getArgument(0)));
+    when(creditRepository.save(any(Credit.class)))
+        .thenAnswer(invocation -> Single.just(invocation.getArgument(0)));
     when(creditRepository.existsByCustomerIdAndHasOverdueDebtTrue("customer-1"))
         .thenReturn(Single.just(false));
     when(stringRedisOps.opsForValue()).thenReturn(valueOperations);
